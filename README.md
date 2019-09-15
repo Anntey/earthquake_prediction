@@ -1,6 +1,6 @@
 # Kaggle: Earthquake Prediction
 
-Data: 4194 signal segments
+Data: 4194 segments of acoustic signals relating to laboratory earthquakes
 
 Task: predict the time of failure
 
