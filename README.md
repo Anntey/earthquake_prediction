@@ -1,4 +1,4 @@
-# Kaggle: Earthquake Prediction
+# Kaggle: Earthquake Prediction ([link](https://www.kaggle.com/c/LANL-Earthquake-Prediction/overview))
 
 Data: 4194 segments of acoustic signals relating to laboratory earthquakes
 
