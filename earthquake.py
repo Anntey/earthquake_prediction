@@ -1,7 +1,4 @@
 
-# x -> segment
-# preds_lgb_test
-
 #############
 # Libraries #
 #############
@@ -33,7 +30,7 @@ num_segments = train.shape[0] // segment_length # results in 4194 segments for t
 x_train = pd.DataFrame(index = range(num_segments), dtype = np.float64)
 y_train = pd.DataFrame(index = range(num_segments), dtype = np.float64, columns = ["time_to_failure"])
 
-# ------------- Visualize a segment of data -------------
+# ------------- Visualize a segment of training data -------------
 fig, ax1 = plt.subplots(figsize = (12, 6))
 plt.title("A segment of data")
 plt.plot(train["acoustic_data"].values[0:12582910], color = "blue")
@@ -129,10 +126,10 @@ col_means_train = {}
 for col in x_train.columns:
     if x_train[col].isnull().any():
         print(f"Imputing column {col}...")
-        mean_value = x_train.loc[x_train[col] != -np.inf, col].mean()
-        col_means_train[col] = mean_value
-        x_train.loc[x_train[col] == -np.inf, col] = mean_value
-        x_train[col] = x_train[col].fillna(mean_value)       
+        mean_value = x_train.loc[x_train[col] != -np.inf, col].mean() # calculate col mean
+        col_means_train[col] = mean_value # save in dict
+        x_train.loc[x_train[col] == -np.inf, col] = mean_value # impute -Inf
+        x_train[col] = x_train[col].fillna(mean_value) # impute NA
 
 # ------------- Scaling -------------
 scaler = StandardScaler()
@@ -155,6 +152,7 @@ for i in range(12):
     plt.plot(segment["acoustic_data"])
 plt.tight_layout()
 
+# ------------- Repeat feature creation -------------
 for i, seg_id in enumerate(x_test.index):
     segment = pd.read_csv("./input/test/" + seg_id + ".csv")
     segment = pd.Series(segment["acoustic_data"].values)
@@ -209,13 +207,15 @@ for i, seg_id in enumerate(x_test.index):
         x_test.loc[seg_id, f"q99_roll_std_{window_size}"] = np.quantile(roll_std, 0.99)
         x_test.loc[seg_id, f"avg_change_abs_roll_std_{window_size}"] = np.mean(np.diff(roll_std))
         x_test.loc[seg_id, f"avg_change_rate_roll_std_{window_size}"] = np.mean(np.nonzero((np.diff(roll_std) / roll_std[:-1]))[0])
-        
+ 
+# ------------- Mean imputation -------------        
 for col in x_test.columns:
     if x_test[col].isnull().any():
         print(f"Imputing column {col}...")
         x_test.loc[x_test[col] == -np.inf, col] = col_means_train[col] # if -Inf set train mean
         x_test[col] = x_test[col].fillna(col_means_train[col]) # if NA set train mean      
 
+# ------------- Scaling -------------
 x_test_scaled = scaler.transform(x_test) # use the scaler fitted to training data
 x_test = pd.DataFrame(x_test_scaled, columns = x_test.columns)
 
@@ -226,19 +226,18 @@ x_test = pd.DataFrame(x_test_scaled, columns = x_test.columns)
 num_folds = 5
 folds = KFold(num_folds, shuffle = True, random_state = 2019)
 
-def train_model(X = None, y = None, X_test = None, params = None, folds = folds,
-                model_type = None, feat_importance = False):
-
+def train_model(X, y, X_test, model_type = None, params = None, folds = folds, feat_importance = False):
     preds_oof_all = np.zeros(len(X)) # out-of-fold predictions
     preds_test_all = np.zeros(len(X_test)) # test set predictions
     errors_oof_all = [] # mean absolute error for out-of-fold predictions
-    feature_importances = pd.DataFrame()
+    feat_imps_all = pd.DataFrame()
     
+    # ---------- Iterate over folds ----------
     for fold_i, (train_i, oof_i) in enumerate(folds.split(X)):
         x_train, x_oof = X.iloc[train_i], X.iloc[oof_i]
         y_train, y_oof = y.iloc[train_i], y.iloc[oof_i]
         
-        # ---------- Model types ----------
+        # ---------- Fit model and predict in current fold ----------
         if model_type == "lgb":
             model = lgb.LGBMRegressor(**params, n_estimators = 50_000, n_jobs = -1)
             model.fit(
@@ -271,49 +270,49 @@ def train_model(X = None, y = None, X_test = None, params = None, folds = folds,
         if model_type == "nusvr":
             model = NuSVR(gamma = "scale", nu = 0.7, tol = 0.01, C = 1.0)
             model.fit(x_train, y_train)          
-            preds_oof = model.predict(x_oof).reshape(-1, )
-            error_oof = mean_absolute_error(y_oof, preds_oof)
-            print(f"Fold {fold_i}. MAE: {error_oof:.4f}.")        
-            preds_test = model.predict(X_test).reshape(-1,)
-        
+            preds_oof = model.predict(x_oof)
+            preds_test = model.predict(X_test)   
+                    
         if model_type == "krr":
             model = KernelRidge(kernel = "rbf", alpha = 0.1, gamma = 0.01)
             model.fit(x_train, y_train)          
-            preds_oof = model.predict(x_oof).reshape(-1, )
-            error_oof = mean_absolute_error(y_oof, preds_oof)
-            print(f"Fold {fold_i}. MAE: {error_oof:.4f}.")         
-            preds_test = model.predict(X_test).reshape(-1,)
-                    
-        preds_oof_all[oof_i] = preds_oof.reshape(-1, ) # set out-of-fold preds to right index
-        preds_test_all += preds_test # ???????????????
+            preds_oof = model.predict(x_oof).reshape(-1, ) # reshape from (839, 1) to (839, )
+            preds_test = model.predict(X_test).reshape(-1, )   
+                   
+        # ---------- Save errors and predictions from fold ----------         
+        preds_oof_all[oof_i] = preds_oof # set out-of-fold preds to right index                 
+        preds_test_all += preds_test # sum the predictions (to be averaged later over folds)
         error_oof = mean_absolute_error(y_oof, preds_oof)
         errors_oof_all.append(error_oof) # append errors from current fold
-       
-        # ---------- Feature importance in fold ----------
+        
+        if (model_type == "nusvr" or model_type == "krr"):
+            print(f"Fold {fold_i + 1}. MAE: {error_oof:.4f}.")  # fold evaluation for sklearn models
+      
+        # ---------- Feature importance in fold for LGB ----------
         if (model_type == "lgb" and feat_importance == True):
-            fold_importance = pd.DataFrame()
-            fold_importance["feature"] = X.columns
-            fold_importance["importance"] = model.feature_importances_
-            fold_importance["fold"] = fold_i + 1
-            feature_importances = pd.concat([feature_importances, fold_importance], axis = 0)
+            feat_imp_fold = pd.DataFrame()
+            feat_imp_fold["feature"] = X.columns
+            feat_imp_fold["importance"] = model.feature_importances_
+            feat_imp_fold["fold"] = fold_i + 1
+            feat_imps_all = pd.concat([feat_imps_all, feat_imp_fold], axis = 0)
             
-    # ---------- Aggregating results over folds ----------        
-    preds_test_all /= num_folds
+    # ---------- Aggregate errors and predictions over all folds ----------        
+    preds_test_all /= num_folds # average predictions
     mean_error = np.mean(errors_oof_all)
     std_error = np.std(errors_oof_all)
     print(f"CV error mean: {mean_error:.4f}, std: {std_error:.4f}")
     
-    # ---------- Feature importance total ----------
+    # ---------- Feature importance over all folds ----------
     if (model_type == "lgb" and feat_importance == True):
-        feature_importances["importance"] /= num_folds
-        cols = feature_importances[["feature", "importance"]].groupby("feature").mean().sort_values("importance", ascending = False)[0:30].index
-        best_features = feature_importances.loc[feature_importances.feature.isin(cols)]
-        plt.figure(figsize = (13, 7));
-        sns.barplot(x = "importance", y = "feature", data=best_features.sort_values("importance", ascending = False));
-        plt.title("LGB best features (avg over folds)");    
-        return preds_oof_all, preds_test_all    
-    else:
-        return preds_oof_all, preds_test_all
+        feat_imps_all["importance"] /= num_folds # average importances
+        cols = feat_imps_all[["feature", "importance"]].groupby("feature").mean().sort_values("importance", ascending = False)[0:30].index
+        best_features = feat_imps_all.loc[feat_imps_all.feature.isin(cols)] # top 30 feats
+        best_features = best_features.sort_values("importance", ascending = False) # sort
+        plt.figure(figsize = (13, 7))
+        sns.barplot("importance", "feature", data = best_features)
+        plt.title("LGB best features (avg over folds)")
+
+    return preds_oof_all, preds_test_all
     
 ##############
 # Fit models #
@@ -328,12 +327,12 @@ lgb_params = {
         "learning_rate": 0.01,
         "boosting": "gbdt",
         "bagging_freq": 5,
-        "bagging_fraction": 0.8127,
+        "bagging_fraction": 0.81,
         "bagging_seed": 11,
         "metric": "mae",
         "verbosity": -1,
-        "reg_alpha": 0.1303,
-        "reg_lambda": 0.3603
+        "reg_alpha": 0.13,
+        "reg_lambda": 0.36
 }
 
 preds_lgb_train, preds_lgb_test, = train_model(
@@ -384,12 +383,12 @@ preds_krr_train, preds_krr_test = train_model(
 # Prediction #
 ##############
 
-# ------------- Blending -------------
+# ------------- Model blending -------------
 preds_blend_train = (preds_lgb_train + preds_xgb_train + preds_svr_train + preds_krr_train) / 4
 preds_blend_test = (preds_lgb_test + preds_xgb_test + preds_svr_test + preds_krr_test) / 4
 
 # ------------- Model stacking -------------
-stack_train = np.vstack([preds_lgb_train, preds_xgb_train, preds_svr_train, preds_krr_train]).transpose()
+stack_train = np.vstack([preds_lgb_train, preds_xgb_train, preds_svr_train, preds_krr_train]).transpose() # reshape (4, 4194) to (4194, 4)
 stack_train = pd.DataFrame(stack_train, columns = ["lgb", "xgb", "svr", "krr"])
 stack_test = np.vstack([preds_lgb_test, preds_xgb_test, preds_svr_test, preds_krr_test]).transpose()
 stack_test = pd.DataFrame(stack_test)
@@ -403,9 +402,9 @@ preds_stack_train, preds_stack_test = train_model(
         feat_importance = True
 )
 
-##############
-# Evaluation #
-##############
+###########################
+# Visualizing predictions #
+###########################
 
 plt.figure(figsize = (18, 8))
 # ---------------- LGB ----------------
@@ -447,9 +446,9 @@ plt.title("blend")
 # -------------------------------------
 plt.suptitle("Predictions vs actual")
 
-############################
-# Model blending/averaging #
-############################
+##############
+# Submission #
+##############
 
 test_df = pd.read_csv("./input/sample_submission.csv", index_col = "seg_id")
 
