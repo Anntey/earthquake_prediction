@@ -305,11 +305,11 @@ def train_model(X, y, X_test, model_type = None, params = None, folds = folds, f
     # ---------- Feature importance over all folds ----------
     if (model_type == "lgb" and feat_importance == True):
         feat_imps_all["importance"] /= num_folds # average importances
-        cols = feat_imps_all[["feature", "importance"]].groupby("feature").mean().sort_values("importance", ascending = False)[0:30].index
-        best_features = feat_imps_all.loc[feat_imps_all.feature.isin(cols)] # top 30 feats
-        best_features = best_features.sort_values("importance", ascending = False) # sort
+        top_30_feats = feat_imps_all[["feature", "importance"]].groupby("feature").mean().sort_values("importance", ascending = False)[0:30].index
+        values = feat_imps_all.loc[feat_imps_all["feature"].isin(top_30_feats)]
+        values = values.sort_values("importance", ascending = False)
         plt.figure(figsize = (13, 7))
-        sns.barplot("importance", "feature", data = best_features)
+        sns.barplot("importance", "feature", data = values)
         plt.title("LGB best features (avg over folds)")
 
     return preds_oof_all, preds_test_all
