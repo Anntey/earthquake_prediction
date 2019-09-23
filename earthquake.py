@@ -268,15 +268,15 @@ def train_model(X, y, X_test, model_type = None, params = None, folds = folds, f
             preds_test = model.predict(xgb_test, ntree_limit = model.best_ntree_limit)
         
         if model_type == "nusvr":
-            model = NuSVR(gamma = "scale", nu = 0.7, tol = 0.01, C = 1.0)
+            model = NuSVR(**params)
             model.fit(x_train, y_train)          
             preds_oof = model.predict(x_oof)
             preds_test = model.predict(X_test)   
                     
         if model_type == "krr":
-            model = KernelRidge(kernel = "rbf", alpha = 0.1, gamma = 0.01)
+            model = KernelRidge(**params)
             model.fit(x_train, y_train)          
-            preds_oof = model.predict(x_oof).reshape(-1, ) # reshape from (839, 1) to (839, )
+            preds_oof = model.predict(x_oof).reshape(-1, ) # reshape from (n, 1) to (n, )
             preds_test = model.predict(X_test).reshape(-1, )   
                    
         # ---------- Save errors and predictions from fold ----------         
@@ -364,19 +364,34 @@ preds_xgb_train, preds_xgb_test = train_model(
 )
 
 # ------------- 3. NuSVR -------------
+svr_params = {
+    "gamma": "scale",
+    "nu": 0.7,
+    "tol": 0.01,
+    "C": 1.0
+}
+
 preds_svr_train, preds_svr_test = train_model(
         x_train,
         y_train,
         x_test,
-        model_type = "nusvr"
+        model_type = "nusvr",
+        params = svr_params
 )
 
 # ------------- 4. KRR -------------
+krr_params {
+    "kernel": "rbf",
+    "alpha": 0.1,
+    "gamma": 0.01
+}
+
 preds_krr_train, preds_krr_test = train_model(
         x_train,
         y_train,
         x_test,
-        model_type = "krr"
+        model_type = "krr",
+        params = krr_params
 )
     
 ##############
@@ -388,7 +403,7 @@ preds_blend_train = (preds_lgb_train + preds_xgb_train + preds_svr_train + preds
 preds_blend_test = (preds_lgb_test + preds_xgb_test + preds_svr_test + preds_krr_test) / 4
 
 # ------------- Model stacking -------------
-stack_train = np.vstack([preds_lgb_train, preds_xgb_train, preds_svr_train, preds_krr_train]).transpose() # reshape (4, 4194) to (4194, 4)
+stack_train = np.vstack([preds_lgb_train, preds_xgb_train, preds_svr_train, preds_krr_train]).transpose() # reshape (4, n) to (n, 4)
 stack_train = pd.DataFrame(stack_train, columns = ["lgb", "xgb", "svr", "krr"])
 stack_test = np.vstack([preds_lgb_test, preds_xgb_test, preds_svr_test, preds_krr_test]).transpose()
 stack_test = pd.DataFrame(stack_test)
