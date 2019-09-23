@@ -380,7 +380,7 @@ preds_svr_train, preds_svr_test = train_model(
 )
 
 # ------------- 4. KRR -------------
-krr_params {
+krr_params = {
     "kernel": "rbf",
     "alpha": 0.1,
     "gamma": 0.01
