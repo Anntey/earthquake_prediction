@@ -230,7 +230,7 @@ def train_model(X, y, X_test, model_type = None, params = None, folds = folds, f
     preds_oof_all = np.zeros(len(X)) # out-of-fold predictions
     preds_test_all = np.zeros(len(X_test)) # test set predictions
     errors_oof_all = [] # mean absolute error for out-of-fold predictions
-    feat_imps_all = pd.DataFrame()
+    feat_imp_all = pd.DataFrame()
     
     # ---------- Iterate over folds ----------
     for fold_i, (train_i, oof_i) in enumerate(folds.split(X)):
@@ -294,7 +294,7 @@ def train_model(X, y, X_test, model_type = None, params = None, folds = folds, f
             feat_imp_fold["feature"] = X.columns
             feat_imp_fold["importance"] = model.feature_importances_
             feat_imp_fold["fold"] = fold_i + 1
-            feat_imps_all = pd.concat([feat_imps_all, feat_imp_fold], axis = 0)
+            feat_imp_all = pd.concat([feat_imp_all, feat_imp_fold], axis = 0)
             
     # ---------- Aggregate errors and predictions over all folds ----------        
     preds_test_all /= num_folds # average predictions
@@ -304,12 +304,12 @@ def train_model(X, y, X_test, model_type = None, params = None, folds = folds, f
     
     # ---------- Feature importance over all folds ----------
     if (model_type == "lgb" and feat_importance == True):
-        feat_imps_all["importance"] /= num_folds # average importances
-        top_30_feats = feat_imps_all[["feature", "importance"]].groupby("feature").mean().sort_values("importance", ascending = False)[0:30].index
-        values = feat_imps_all.loc[feat_imps_all["feature"].isin(top_30_feats)]
-        values = values.sort_values("importance", ascending = False)
+        feat_imp_all["importance"] /= num_folds # average importances
+        top_30_feats = feat_imp_all[["feature", "importance"]].groupby("feature").mean().sort_values("importance", ascending = False)[0:30].index
+        imp_values_top_30 = feat_imp_all.loc[feat_imp_all["feature"].isin(top_30_feats)]
+        imp_values_top_30 = imp_values_top_30.sort_values("importance", ascending = False)
         plt.figure(figsize = (13, 7))
-        sns.barplot("importance", "feature", data = values)
+        sns.barplot("importance", "feature", data = imp_values_top_30)
         plt.title("LGB best features (avg over folds)")
 
     return preds_oof_all, preds_test_all
