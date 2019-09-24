@@ -2,7 +2,7 @@
 
 Data: 4194 segments of acoustic signals relating to laboratory earthquakes
 
-Task: predict the time of failure
+Task: predict the time to failure (at the end of a segment)
 
 Evaluation: Mean Absolute Error
 
