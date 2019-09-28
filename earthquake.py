@@ -307,7 +307,7 @@ def train_model(X, y, X_test, model_type = None, params = None, folds = folds, f
         feat_imp_all["importance"] /= num_folds # average importances
         top_30_feats = feat_imp_all[["feature", "importance"]].groupby("feature").mean().sort_values("importance", ascending = False)[0:30].index
         imp_values_top_30 = feat_imp_all.loc[feat_imp_all["feature"].isin(top_30_feats)]
-        imp_values_top_30 = imp_values_top_30.sort_values("importance", ascending = False)
+        imp_values_top_30 = imp_values_top_30.sort_values("importance", ascending = False) # importance values from each of the 5 folds for the top-30 features ie 150 values
         plt.figure(figsize = (13, 7))
         sns.barplot("importance", "feature", data = imp_values_top_30)
         plt.title("LGB best features (avg over folds)")
