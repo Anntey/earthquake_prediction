@@ -6,7 +6,7 @@ __Task__: predict the time to failure (at the end of a segment)
 
 __Evaluation__: Mean Absolute Error
 
-__Solution__: Model stacking (1) LGB, (2) XGB, (3) NuSVR and (4) KRR
+__Solution__: Model stacking LGB, XGB, NuSVR and KRR
 
 __Success__: 1.538 MAE
 
