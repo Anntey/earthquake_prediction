@@ -13,5 +13,3 @@ __Success__: 1.538 MAE
 ![](predictions.png)
 
 ![](feature_importance.png)
-
-![](feature_importance_stack.png)
